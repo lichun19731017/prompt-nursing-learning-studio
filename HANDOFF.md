@@ -32,3 +32,4 @@ Windows 封裝：Bash 不可用，使用官方 prepare-site-build.cjs 配合 Pow
 正式記憶庫：本輪以檔名查詢未找到 00_HOME.md，未讀取正式記憶；依據目前對話與本地專案。
 
 GitHub 儲存庫已建立並確認為 PRIVATE：https://github.com/lichun19731017/prompt-nursing-learning-studio 。發布分支使用 main，專案遠端名稱為 github。上傳前檢查三筆原始歷史，未發現指定的金鑰樣式或本機資料庫。
+GitHub 發布完成：main 已上傳；讀回確認版本 9080d6937a348b2200a753b884436d5f49268288 與本機一致，README 存在，儲存庫為 PRIVATE 且非空。此次僅文件變更，未重新發布 Sites，網站仍為已驗證的版本 3。
