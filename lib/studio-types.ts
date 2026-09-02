@@ -4,6 +4,8 @@ export type PairCard = {
   groupId: number;
   pairNo: number;
   members: number;
+  nameOne: string;
+  nameTwo: string;
   change: string;
   difference: string;
   verification: string;
@@ -39,4 +41,15 @@ export const stages = [
 ];
 export const v1 = '請說明南丁格爾與現代護理。';
 export const referencePrompt =
-  '請根據我提供的「南丁格爾與現代護理課堂重點卡」，向護理系大一新生說明三項貢獻與現代護理的關聯。請用三欄表格呈現：課堂提到的貢獻、與現代護理的關聯、護理新生可以學到什麼；三項貢獻各占一列，每格60字內。只能使用重點卡，請標明各項對應的重點；資料不足處標示「重點卡未提供，需查證」，不要自行補充事件、年份或文獻。';
+  '請根據我提供的「南丁格爾與現代護理講義」，向護理系大一新生說明三項貢獻與現代護理的關聯。請用三欄表格呈現：課堂提到的貢獻、與現代護理的關聯、護理新生可以學到什麼；三項貢獻各占一列，每格60字內。只能使用講義，請標明各項對應的重點；資料不足處標示「講義未提供，需查證」，不要自行補充事件、年份或文獻。';
+
+export const CLASS_NAMES = ['A', 'B', 'C', 'D'] as const;
+export function classLabel(id: number) {
+  return CLASS_NAMES[id - 1] ?? '';
+}
+export function parseClassId(value: string | null) {
+  const i = CLASS_NAMES.indexOf(
+    value?.toUpperCase() as (typeof CLASS_NAMES)[number],
+  );
+  return i >= 0 ? i + 1 : Number(value);
+}

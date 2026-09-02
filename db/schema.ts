@@ -12,6 +12,8 @@ export const pairs = sqliteTable(
     groupId: integer('group_id').notNull(),
     pairNo: integer('pair_no').notNull(),
     members: integer('members').notNull(),
+    nameOne: text('name_one').notNull().default(''),
+    nameTwo: text('name_two').notNull().default(''),
     change: text('change').notNull(),
     difference: text('difference').notNull(),
     verification: text('verification').notNull(),

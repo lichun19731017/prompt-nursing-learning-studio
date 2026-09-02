@@ -25,8 +25,11 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import { classroomCsv } from '@/lib/classroom-export';
 import {
   stages,
+  classLabel,
+  parseClassId,
   v1,
   referencePrompt,
   type Classroom,
@@ -38,6 +41,8 @@ type Notice = { text: string; error?: boolean };
 const emptyPair = {
   pairNo: 1,
   members: 2,
+  nameOne: '',
+  nameTwo: '',
   change: '',
   difference: '',
   verification: '',
@@ -245,7 +250,7 @@ function Practice({ draftKey }: { draftKey: string }) {
           placeholder="例如：沒有指定回答對象；有些敘述沒有資料依據。"
         />
         <div className="inline-note">
-          請使用老師提供的課堂重點卡。這裡的例子示範檢查方式，不是南丁格爾的史實答案。
+          請使用老師提供的講義。這裡的例子示範檢查方式，不是南丁格爾的史實答案。
         </div>
         <div className="mini-checks">
           <span>對象與任務</span>
@@ -280,7 +285,7 @@ function Practice({ draftKey }: { draftKey: string }) {
         </div>
         <CopyButton text={prompt} label="複製我的 V2 Prompt" />
         <p className="field-hint" style={{ marginTop: 12 }}>
-          執行 V2 後，至少追問一次，並回到重點卡查證。完整 AI
+          執行 V2 後，至少追問一次，並回到講義查證。完整 AI
           回答請保留在自己的對話中。
         </p>
         <Field
@@ -339,14 +344,15 @@ function PairForm({
         id: id.current,
         version: editing?.version || 0,
         ...draft,
+        members: 2,
       });
       try {
         sessionStorage.removeItem(key);
       } catch {}
       notify({
         text:
-          '比較卡已送到第' +
-          classId +
+          '比較卡已送到 ' +
+          classLabel(classId) +
           '班・第' +
           groupId +
           '組。同組同學可以讀取了。',
@@ -366,11 +372,11 @@ function PairForm({
           <h2>{editing ? '修訂比較卡' : '一起留下最有用的發現'}</h2>
         </div>
         <span className="location-badge">
-          第{classId}班・第{groupId}組
+          {classLabel(classId)} 班・第{groupId}組
         </span>
       </div>
       <p className="muted">
-        兩人各自說明自己的版本，再由一人代表提交。每對一張，三人同行也可以。
+        兩人各自說明自己的版本，再由一人代表提交。每對一張，請填寫兩位同學的姓名。
       </p>
       <form onSubmit={submit}>
         <div className="form-row">
@@ -386,32 +392,49 @@ function PairForm({
               onChange={(e) => set('pairNo', Number(e.target.value))}
             />
             <span className="field-hint">
-              請先與同組約定編號，不填姓名或學號。
+              請先與同組約定編號，姓名填寫於下方。
             </span>
           </label>
-          <fieldset className="form-field">
-            <legend>同行人數</legend>
-            <div className="segmented">
-              {[2, 3].map((n) => (
-                <Button
-                  key={n}
-                  type="button"
-                  variant={draft.members === n ? 'default' : 'outline'}
-                  onClick={() => set('members', n)}
-                  aria-pressed={draft.members === n}
-                >
-                  {n}人
-                </Button>
-              ))}
-            </div>
-          </fieldset>
+          <div className="form-field">
+            <strong>兩人一組</strong>
+            <span className="field-hint">
+              由其中一位代表提交，兩位姓名皆為必填。
+            </span>
+          </div>
         </div>
+        <div className="form-row">
+          <label className="form-field">
+            <strong>第一位同學姓名（必填）</strong>
+            <Input
+              required
+              maxLength={80}
+              autoComplete="off"
+              value={draft.nameOne}
+              onChange={(e) => set('nameOne', e.target.value)}
+              placeholder="請輸入姓名"
+            />
+          </label>
+          <label className="form-field">
+            <strong>第二位同學姓名（必填）</strong>
+            <Input
+              required
+              maxLength={80}
+              autoComplete="off"
+              value={draft.nameTwo}
+              onChange={(e) => set('nameTwo', e.target.value)}
+              placeholder="請輸入姓名"
+            />
+          </label>
+        </div>
+        <p className="field-hint">
+          姓名會隨比較卡顯示，供網站使用者與教師閱讀，並包含在教師匯出資料中。請勿填寫學號或病人資料。
+        </p>
         <Field
           label="① 我們改了什麼？"
           hint="貼上最關鍵的一句 Prompt 修改。"
           value={draft.change}
           onChange={(v) => set('change', v)}
-          placeholder="例如：我們加入「只能根據課堂重點卡回答」。"
+          placeholder="例如：我們加入「只能根據講義回答」。"
         />
         <Field
           label="② 回答有什麼差異？"
@@ -422,10 +445,10 @@ function PairForm({
         />
         <Field
           label="③ 我們查證了什麼？"
-          hint="寫出重點卡的對應內容，以及仍未確認之處。"
+          hint="寫出講義的對應內容，以及仍未確認之處。"
           value={draft.verification}
           onChange={(v) => set('verification', v)}
-          placeholder="我們對照重點卡第……點，確認……；仍需查證……。"
+          placeholder="我們對照講義第……點，確認……；仍需查證……。"
         />
         <div className="form-actions">
           <Button
@@ -475,6 +498,11 @@ function PairList({
               {c.members}人同行 · {time(c.updatedAt)}
             </span>
           </header>
+          <p className="pair-names">
+            {c.nameOne && c.nameTwo
+              ? c.nameOne + '、' + c.nameTwo
+              : '尚未填寫姓名'}
+          </p>
           <div>
             <small>我們改了什麼</small>
             <p>{c.change}</p>
@@ -628,7 +656,7 @@ function ConclusionForm({
           <h2>用比較卡支持你們的選擇</h2>
         </div>
         <span className="location-badge">
-          第{classId}班・第{groupId}組
+          {classLabel(classId)} 班・第{groupId}組
         </span>
       </div>
       <p className="muted">
@@ -730,7 +758,7 @@ export default function Home() {
   const requestNumber = useRef(0);
   useEffect(() => {
     const q = new URLSearchParams(location.search);
-    const c = Number(q.get('class')),
+    const c = parseClassId(q.get('class')),
       g = Number(q.get('group'));
     if (c >= 1 && c <= 4 && Number.isInteger(c)) setClassId(c);
     if (g >= 1 && g <= 6 && Number.isInteger(g)) setGroupId(g);
@@ -777,7 +805,7 @@ export default function Home() {
     if (!ready) return;
     const url = new URL(location.href);
     url.search = '';
-    url.searchParams.set('class', String(classId));
+    url.searchParams.set('class', classLabel(classId));
     if (groupId) url.searchParams.set('group', String(groupId));
     if (teacher) url.searchParams.set('view', 'teacher');
     history.replaceState(null, '', url);
@@ -820,10 +848,10 @@ export default function Home() {
   async function share() {
     try {
       const url = new URL(location.href);
-      url.search = '?class=' + classId;
+      url.search = '?class=' + classLabel(classId);
       await navigator.clipboard.writeText(url.toString());
       setNotice({
-        text: '第' + classId + '班的入口連結已複製。學生進入後再選組別。',
+        text: classLabel(classId) + ' 班的入口連結已複製。學生進入後再選組別。',
       });
     } catch {
       setNotice({ text: '請直接複製網址列的班級連結。' });
@@ -834,63 +862,13 @@ export default function Home() {
     let body = JSON.stringify(data, null, 2),
       mime = 'application/json';
     if (format === 'csv') {
-      const cell = (v: unknown) => {
-        let s = String(v ?? '');
-        if (/^[=+@\-\t\r]/.test(s)) s = "'" + s;
-        return '"' + s.replaceAll('"', '""') + '"';
-      };
-      const rows = [
-        [
-          '班級',
-          '組別',
-          '類型',
-          '兩人編號',
-          '人數',
-          '修改／選擇',
-          '差異／理由',
-          '查證／待確認',
-          '共同改寫',
-          '引用比較卡',
-          '更新時間',
-        ],
-        ...data.pairs.map((c) => [
-          c.classId,
-          c.groupId,
-          '兩人比較卡',
-          c.pairNo,
-          c.members,
-          c.change,
-          c.difference,
-          c.verification,
-          '',
-          '',
-          c.updatedAt,
-        ]),
-        ...data.conclusions.map((c) => [
-          c.classId,
-          c.groupId,
-          '共同結論',
-          '',
-          '',
-          c.choice,
-          c.reason,
-          c.uncertainty,
-          c.rewrite,
-          c.evidence
-            .map(
-              (id) => '第' + data.pairs.find((p) => p.id === id)?.pairNo + '對',
-            )
-            .join('、'),
-          c.updatedAt,
-        ]),
-      ];
-      body = '\ufeff' + rows.map((r) => r.map(cell).join(',')).join('\r\n');
+      body = classroomCsv(data);
       mime = 'text/csv;charset=utf-8';
     }
     const url = URL.createObjectURL(new Blob([body], { type: mime }));
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'Prompt共學_第' + classId + '班.' + format;
+    a.download = 'Prompt共學_' + classLabel(classId) + '班.' + format;
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
@@ -987,7 +965,8 @@ export default function Home() {
                 className="class-button"
                 aria-pressed={classId === n}
               >
-                <span>0{n}</span>第{n}班<ArrowRight size={16} />
+                <span>0{n}</span>
+                {classLabel(n)} 班<ArrowRight size={16} />
               </Button>
             ))}
           </div>
@@ -1002,7 +981,7 @@ export default function Home() {
           <p className="privacy-note">
             使用班級與組別識別。
             <br />
-            請勿填寫姓名、學號或病人資料。
+            比較卡請填寫兩位姓名。請勿填寫學號或病人資料。
           </p>
           {teacher && <Timer />}
         </aside>
@@ -1010,7 +989,7 @@ export default function Home() {
           <div className="section-top">
             <div>
               <p className="eyebrow">
-                第{classId}班 ·{' '}
+                {classLabel(classId)} 班 ·{' '}
                 {teacher
                   ? '教師唯讀總覽'
                   : groupId
@@ -1142,7 +1121,7 @@ export default function Home() {
                 <div>
                   <strong>本次任務｜南丁格爾與現代護理</strong>
                   <p>
-                    根據老師提供的課堂重點卡，說明她的貢獻如何影響現代護理。重點卡由教師於課堂提供。
+                    根據老師提供的講義，說明她的貢獻如何影響現代護理。講義由教師於課堂提供。
                   </p>
                 </div>
               </div>
@@ -1161,7 +1140,7 @@ export default function Home() {
                         <p>{s.caption}</p>
                         {i === 1 && (
                           <p>
-                            每對只提交一張卡。不同組的人數不必相同，奇數時可三人同行。
+                            每對兩人，只提交一張卡；必須填寫兩位同學的姓名。
                           </p>
                         )}
                         {i === 2 && (
@@ -1190,7 +1169,7 @@ export default function Home() {
                     </div>
                   )}
                   <p className="draft-note">
-                    教師總覽是匿名成果的唯讀視圖，非管理權限入口。正式上課前請備妥重點卡，並確認學生可開啟班級連結。
+                    教師總覽是具名比較卡與小組成果的唯讀視圖，非管理權限入口。正式上課前請備妥講義，並確認學生可開啟班級連結。
                   </p>
                 </section>
               )}
@@ -1363,7 +1342,7 @@ export default function Home() {
       </div>
       <footer>
         先理解，再比較，最後共同決定。
-        <span>Prompt Learning Studio · 不蒐集姓名與學號</span>
+        <span>Prompt Learning Studio · 兩人具名參與，不蒐集學號</span>
       </footer>
     </div>
   );

@@ -55,6 +55,8 @@ function pair(r: Row, owner: string): PairCard {
     groupId: r.group_id,
     pairNo: r.pair_no,
     members: r.members,
+    nameOne: r.name_one || '',
+    nameTwo: r.name_two || '',
     change: r.change,
     difference: r.difference,
     verification: r.verification,
@@ -169,7 +171,9 @@ export async function POST(request: Request) {
     if (b.action === 'pair') {
       const id = identifier(b.id),
         pairNo = bounded(b.pairNo, 1, 100, '兩人編號'),
-        members = bounded(b.members, 2, 3, '人數');
+        members = bounded(b.members, 2, 2, '人數');
+      const nameOne = content(b.nameOne, '第一位同學姓名', 80),
+        nameTwo = content(b.nameTwo, '第二位同學姓名', 80);
       const change = content(b.change, '關鍵修改'),
         difference = content(b.difference, '回答差異'),
         verification = content(b.verification, '查證結果');
@@ -189,7 +193,9 @@ export async function POST(request: Request) {
           previous.difference === difference &&
           previous.verification === verification &&
           previous.pair_no === pairNo &&
-          previous.members === members
+          previous.members === members &&
+          previous.name_one === nameOne &&
+          previous.name_two === nameTwo
         )
           return reply(
             { ok: true, id, version: previous.version },
@@ -199,11 +205,13 @@ export async function POST(request: Request) {
         const v = bounded(b.version, 1, 10000, '版本');
         const result = await db
           .prepare(
-            'UPDATE pairs SET pair_no=?, members=?, change=?, difference=?, verification=?, updated_at=?, version=version+1 WHERE id=? AND version=? AND owner=?',
+            'UPDATE pairs SET pair_no=?, members=?, name_one=?, name_two=?, change=?, difference=?, verification=?, updated_at=?, version=version+1 WHERE id=? AND version=? AND owner=?',
           )
           .bind(
             pairNo,
             members,
+            nameOne,
+            nameTwo,
             change,
             difference,
             verification,
@@ -221,7 +229,7 @@ export async function POST(request: Request) {
         throw new HttpError(409, '這張卡不存在，請重新整理。');
       await db
         .prepare(
-          'INSERT INTO pairs (id,class_id,group_id,pair_no,members,change,difference,verification,owner,version,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,1,?,?)',
+          'INSERT INTO pairs (id,class_id,group_id,pair_no,members,name_one,name_two,change,difference,verification,owner,version,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,1,?,?)',
         )
         .bind(
           id,
@@ -229,6 +237,8 @@ export async function POST(request: Request) {
           groupId,
           pairNo,
           members,
+          nameOne,
+          nameTwo,
           change,
           difference,
           verification,
