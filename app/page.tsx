@@ -21,8 +21,19 @@ import {
   ExternalLink,
   FileText,
   PenLine,
+  Trash2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogCancel,
+  AlertDialogAction,
+} from '@/components/ui/alert-dialog';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { classroomCsv } from '@/lib/classroom-export';
@@ -54,9 +65,9 @@ const emptyConclusion = {
   rewrite: '',
   uncertainty: '',
 };
-async function post(body: unknown) {
+async function post(body: unknown, method: 'POST' | 'DELETE' = 'POST') {
   const r = await fetch('/api/studio', {
-    method: 'POST',
+    method,
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
@@ -471,14 +482,125 @@ function PairForm({
     </section>
   );
 }
+
+function DeletePairButton({
+  card,
+  referenced,
+  onDeleted,
+}: {
+  card: PairCard;
+  referenced: boolean;
+  onDeleted: (card: PairCard) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  async function remove() {
+    if (busy) return;
+    setBusy(true);
+    setError('');
+    try {
+      await post(
+        {
+          action: 'pair',
+          id: card.id,
+          classId: card.classId,
+          groupId: card.groupId,
+          version: card.version,
+          confirmed: true,
+        },
+        'DELETE',
+      );
+      try {
+        sessionStorage.removeItem(
+          'pair-draft-' + card.classId + '-' + card.groupId + '-' + card.id,
+        );
+      } catch {}
+      setOpen(false);
+      onDeleted(card);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  const hint = !card.canEdit
+    ? '請使用原提交時的瀏覽器刪除。'
+    : referenced
+      ? '共同結論正在引用此卡，請由結論提交者先調整引用。'
+      : '';
+  return (
+    <div className="delete-pair-control">
+      <Button
+        type="button"
+        variant="destructive"
+        disabled={!card.canEdit || referenced}
+        aria-label={'刪除第' + card.pairNo + '對比較卡'}
+        aria-describedby={hint ? 'delete-hint-' + card.id : undefined}
+        onClick={() => {
+          setError('');
+          setOpen(true);
+        }}
+      >
+        <Trash2 />
+        刪除
+      </Button>
+      {hint && (
+        <small className="delete-hint" id={'delete-hint-' + card.id}>
+          {hint}
+        </small>
+      )}
+      <AlertDialog
+        open={open}
+        onOpenChange={(next) => {
+          if (!busy) setOpen(next);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>刪除這張兩人比較卡？</AlertDialogTitle>
+            <AlertDialogDescription>
+              {classLabel(card.classId)} 班・第{card.groupId}組・第{card.pairNo}
+              對
+              <br />
+              {card.nameOne}、{card.nameTwo}
+              <br />
+              確認後會從全組成果與教師總覽移除，無法復原。其他比較卡會保留。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {error && (
+            <p role="alert" className="delete-error">
+              {error}
+            </p>
+          )}
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={busy}>取消</AlertDialogCancel>
+            <AlertDialogAction
+              type="button"
+              variant="destructive"
+              disabled={busy}
+              onClick={remove}
+            >
+              {busy ? '正在刪除…' : '確認刪除'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}
 function PairList({
   cards,
   readOnly,
   onEdit,
+  onDeleted,
+  evidence = [],
 }: {
   cards: PairCard[];
   readOnly?: boolean;
   onEdit: (card: PairCard) => void;
+  onDeleted: (card: PairCard) => void;
+  evidence?: string[];
 }) {
   if (!cards.length)
     return (
@@ -515,12 +637,19 @@ function PairList({
             <small>查證與未確認</small>
             <p>{c.verification}</p>
           </div>
-          {c.canEdit && !readOnly && (
-            <Button type="button" variant="ghost" onClick={() => onEdit(c)}>
-              <PenLine />
-              修訂這張卡
-            </Button>
-          )}
+          <div className="card-actions">
+            {c.canEdit && !readOnly && (
+              <Button type="button" variant="ghost" onClick={() => onEdit(c)}>
+                <PenLine />
+                修訂這張卡
+              </Button>
+            )}
+            <DeletePairButton
+              card={c}
+              referenced={evidence.includes(c.id)}
+              onDeleted={onDeleted}
+            />
+          </div>
         </article>
       ))}
     </div>
@@ -834,6 +963,21 @@ export default function Home() {
     setConclusionForm(false);
     void refresh();
   };
+  const deletedPair = (card: PairCard) => {
+    requestNumber.current++;
+    setData((current) =>
+      current
+        ? {
+            ...current,
+            pairs: current.pairs.filter((p) => p.id !== card.id),
+          }
+        : current,
+    );
+    setNotice({
+      text: '已刪除第' + card.pairNo + '對比較卡，其他資料已保留。',
+    });
+    void refresh(true);
+  };
   const showPair = (c?: PairCard) => {
     setEditing(c);
     setPairForm(true);
@@ -991,7 +1135,7 @@ export default function Home() {
               <p className="eyebrow">
                 {classLabel(classId)} 班 ·{' '}
                 {teacher
-                  ? '教師唯讀總覽'
+                  ? '教師成果總覽'
                   : groupId
                     ? '第' + groupId + '組'
                     : '六組一起學'}
@@ -1169,7 +1313,7 @@ export default function Home() {
                     </div>
                   )}
                   <p className="draft-note">
-                    教師總覽是具名比較卡與小組成果的唯讀視圖，非管理權限入口。正式上課前請備妥講義，並確認學生可開啟班級連結。
+                    教師總覽可閱讀全班成果，也可刪除本瀏覽器提交且未被共同結論引用的比較卡；此入口不提供其他同學資料的管理權限。正式上課前請備妥講義，並確認學生可開啟班級連結。
                   </p>
                 </section>
               )}
@@ -1275,6 +1419,8 @@ export default function Home() {
                       cards={cards}
                       readOnly={teacher}
                       onEdit={showPair}
+                      onDeleted={deletedPair}
+                      evidence={final?.evidence}
                     />
                   )}
                   <div className="next-step">
@@ -1333,6 +1479,8 @@ export default function Home() {
                     cards={cards}
                     readOnly={teacher}
                     onEdit={showPair}
+                    onDeleted={deletedPair}
+                    evidence={final?.evidence}
                   />
                 </>
               )}

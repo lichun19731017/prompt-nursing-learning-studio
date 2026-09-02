@@ -1138,3 +1138,32 @@ fieldset.form-field {
   margin-top: 0;
   overflow-wrap: anywhere;
 }
+
+.card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 18px;
+}
+.card-actions button {
+  min-height: 40px;
+}
+.delete-pair-control {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.comparison-card .delete-hint {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--muted-foreground);
+  max-width: 28em;
+  line-height: 1.6;
+}
+.delete-error {
+  color: var(--destructive);
+  font-size: 14px;
+  line-height: 1.6;
+}

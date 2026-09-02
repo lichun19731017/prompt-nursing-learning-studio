@@ -137,24 +137,28 @@ export async function GET(request: Request) {
     return failure(e);
   }
 }
+async function readBody(request: Request): Promise<Row> {
+  const origin = request.headers.get('origin');
+  if (origin && origin !== new URL(request.url).origin)
+    throw new HttpError(403, '請從本課程網頁送出資料。');
+  if (!request.headers.get('content-type')?.includes('application/json'))
+    throw new HttpError(415, '資料格式不正確。');
+  const raw = await request.text();
+  if (raw.length > 18000)
+    throw new HttpError(413, '內容過長，請保留關鍵修改與依據。');
+  let b: Row;
+  try {
+    b = JSON.parse(raw);
+  } catch {
+    throw new HttpError(400, '資料格式不正確。');
+  }
+  if (!b || typeof b !== 'object' || Array.isArray(b))
+    throw new HttpError(400, '資料格式不正確。');
+  return b;
+}
 export async function POST(request: Request) {
   try {
-    const origin = request.headers.get('origin');
-    if (origin && origin !== new URL(request.url).origin)
-      throw new HttpError(403, '請從本課程網頁送出資料。');
-    if (!request.headers.get('content-type')?.includes('application/json'))
-      throw new HttpError(415, '資料格式不正確。');
-    const raw = await request.text();
-    if (raw.length > 18000)
-      throw new HttpError(413, '內容過長，請保留關鍵修改與依據。');
-    let b: Row;
-    try {
-      b = JSON.parse(raw);
-    } catch {
-      throw new HttpError(400, '資料格式不正確。');
-    }
-    if (!b || typeof b !== 'object' || Array.isArray(b))
-      throw new HttpError(400, '資料格式不正確。');
+    const b = await readBody(request);
     const classId = bounded(b.classId, 1, 4, '班級'),
       groupId = bounded(b.groupId, 1, 6, '組別');
     const existingSession = session(request),
@@ -276,6 +280,10 @@ export async function POST(request: Request) {
           .bind(id)
           .first<Row>();
       const evidence = JSON.stringify(ids);
+      // Validate references atomically with the write, including concurrent deletion.
+      const validEvidence =
+        'NOT EXISTS (SELECT 1 FROM json_each(?) AS requested WHERE NOT EXISTS (SELECT 1 FROM pairs WHERE id=requested.value AND class_id=? AND group_id=?))';
+
       if (old) {
         if (old.owner !== owner)
           throw new HttpError(
@@ -293,7 +301,9 @@ export async function POST(request: Request) {
         const v = bounded(b.version, 1, 10000, '版本');
         const result = await db
           .prepare(
-            'UPDATE conclusions SET choice=?,evidence=?,reason=?,rewrite=?,uncertainty=?,updated_at=?,version=version+1 WHERE id=? AND version=? AND owner=?',
+            'UPDATE conclusions SET choice=?,evidence=?,reason=?,rewrite=?,uncertainty=?,updated_at=?,version=version+1 WHERE id=? AND version=? AND owner=?' +
+              ' AND ' +
+              validEvidence,
           )
           .bind(
             choice,
@@ -305,17 +315,24 @@ export async function POST(request: Request) {
             id,
             v,
             owner,
+            evidence,
+            classId,
+            groupId,
           )
           .run();
         if (!result.meta.changes)
-          throw new HttpError(409, '共同結論已有更新，請重新整理後再確認。');
+          throw new HttpError(
+            409,
+            '共同結論或引用卡片已變更，請重新整理後再確認。',
+          );
         return reply({ ok: true, id, version: v + 1 }, 200, cookie);
       }
       if (b.version && b.version !== 0)
         throw new HttpError(409, '共同結論狀態已變更，請重新整理。');
-      await db
+      const inserted = await db
         .prepare(
-          'INSERT INTO conclusions (id,class_id,group_id,choice,evidence,reason,rewrite,uncertainty,owner,version,updated_at) VALUES (?,?,?,?,?,?,?,?,?,1,?)',
+          'INSERT INTO conclusions (id,class_id,group_id,choice,evidence,reason,rewrite,uncertainty,owner,version,updated_at) SELECT ?,?,?,?,?,?,?,?,?,1,? WHERE ' +
+            validEvidence,
         )
         .bind(
           id,
@@ -328,11 +345,61 @@ export async function POST(request: Request) {
           uncertainty,
           owner,
           now,
+          evidence,
+          classId,
+          groupId,
         )
         .run();
+      if (!inserted.meta.changes)
+        throw new HttpError(409, '引用的比較卡已變更，請重新整理後再確認。');
       return reply({ ok: true, id, version: 1 }, 201, cookie);
     }
     throw new HttpError(400, '不支援這項操作。');
+  } catch (e) {
+    return failure(e);
+  }
+}
+
+export async function DELETE(request: Request) {
+  try {
+    const b = await readBody(request);
+    if (b.action !== 'pair' || b.confirmed !== true)
+      throw new HttpError(400, '請先確認要刪除這張比較卡。');
+    const classId = bounded(b.classId, 1, 4, '班級'),
+      groupId = bounded(b.groupId, 1, 6, '組別'),
+      id = identifier(b.id),
+      version = bounded(b.version, 1, 10000, '版本');
+    const currentSession = session(request);
+    if (!currentSession)
+      throw new HttpError(403, '請使用原提交時的瀏覽器刪除這張卡。');
+    const owner = await hash(currentSession);
+    const db = getDb();
+    const previous = await db
+      .prepare('SELECT * FROM pairs WHERE id=?')
+      .bind(id)
+      .first<Row>();
+    if (!previous)
+      throw new HttpError(404, '這張卡已刪除或不存在，請重新整理。');
+    if (
+      previous.owner !== owner ||
+      previous.class_id !== classId ||
+      previous.group_id !== groupId
+    )
+      throw new HttpError(403, '只能由原提交者在同一瀏覽器刪除這張卡。');
+    if (previous.version !== version)
+      throw new HttpError(409, '這張卡已有更新，請重新整理確認內容後再刪除。');
+    const result = await db
+      .prepare(
+        'DELETE FROM pairs WHERE id=? AND class_id=? AND group_id=? AND owner=? AND version=? AND NOT EXISTS (SELECT 1 FROM conclusions c, json_each(c.evidence) e WHERE c.class_id=pairs.class_id AND c.group_id=pairs.group_id AND e.value=pairs.id)',
+      )
+      .bind(id, classId, groupId, owner, version)
+      .run();
+    if (!result.meta.changes)
+      throw new HttpError(
+        409,
+        '這張卡已被共同結論引用，或內容剛有變更。請重新整理；若仍被引用，請由結論提交者先調整引用，再刪除。',
+      );
+    return reply({ ok: true, id });
   } catch (e) {
     return failure(e);
   }

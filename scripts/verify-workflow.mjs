@@ -3,13 +3,17 @@ import {writeFileSync} from 'node:fs';
 const url='http://localhost:3000/api/studio';
 const ids=[crypto.randomUUID(),crypto.randomUUID(),crypto.randomUUID()];
 const clients={a:'',b:''}, checks=[];
-async function req(body,client='a'){
- const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json','Origin':'http://localhost:3000',...(clients[client]?{cookie:clients[client]}:{})},body:JSON.stringify(body)});
+async function req(body,client='a',method='POST',origin='http://localhost:3000'){
+ const r=await fetch(url,{method,headers:{'Content-Type':'application/json','Origin':origin,...(clients[client]?{cookie:clients[client]}:{})},body:JSON.stringify(body)});
  const cookie=r.headers.get('set-cookie');if(cookie)clients[client]=cookie.split(';')[0];
- return {status:r.status,body:await r.json()};
+ const text=await r.text();
+ let responseBody;try{responseBody=JSON.parse(text)}catch{responseBody={error:text}}
+ return {status:r.status,body:responseBody};
 }
 const card={action:'pair',classId:4,groupId:6,pairNo:99,members:2,nameOne:'測試同學甲',nameTwo:'測試同學乙',change:'測試：限制根據講義',difference:'測試：修改前後具體差異',verification:'測試：對照講義第1點',version:0,id:ids[0]};
 const check=(name,actual,expected)=>{assert.equal(actual,expected,name);checks.push(name)};
+const otherPre=await (await fetch(url+'?classId=3')).json();
+assert(!otherPre.conclusions.some(p=>p.groupId===6),'Local second test group must have no conclusion');
 const pre=await (await fetch(url+'?classId=4')).json();
 assert(!pre.pairs.some(p=>p.groupId===6&&p.pairNo>=99)&&!pre.conclusions.some(p=>p.groupId===6),'Local test group must be empty');
 try{
@@ -42,9 +46,46 @@ try{
  assert(!read.pairs.some(p=>p.id===ids[2]));checks.push('班級查詢隔離');
  assert(read.pairs.some(p=>p.id===ids[0]&&p.canEdit));checks.push('原提交者修訂權限讀回');
  assert(!JSON.stringify(read).includes('"owner"'));checks.push('讀取結果不暴露提交者識別');
+
+ const deletion={action:'pair',classId:4,groupId:6,id:ids[0],version:2,confirmed:true};
+ check('刪除需要確認',(await req({...deletion,confirmed:false},'a','DELETE')).status,400);
+ check('未持有提交者憑證不能刪除',(await req(deletion,'guest','DELETE')).status,403);
+ check('其他提交者不能刪除',(await req(deletion,'b','DELETE')).status,403);
+ check('錯誤班級不能刪除',(await req({...deletion,classId:3},'a','DELETE')).status,403);
+ check('錯誤組別不能刪除',(await req({...deletion,groupId:5},'a','DELETE')).status,403);
+ check('跨站刪除遭拒',(await req(deletion,'a','DELETE','https://other.example')).status,403);
+ check('舊版本不能刪除',(await req({...deletion,version:1},'a','DELETE')).status,409);
+ check('被共同結論引用不能刪除',(await req(deletion,'a','DELETE')).status,409);
+ const conclusionNow=read.conclusions.find(c=>c.groupId===6);
+ check('調整共同結論引用',(await req({...final,reason:conclusionNow.reason,evidence:[ids[1]],version:conclusionNow.version})).status,200);
+ const raceUpdate=await Promise.all([
+   req(deletion,'a','DELETE'),
+   req({...final,evidence:[ids[0]],version:conclusionNow.version+1})
+ ]);
+ assert((raceUpdate[0].status===200&&[400,409].includes(raceUpdate[1].status))||(raceUpdate[0].status===409&&raceUpdate[1].status===200));
+ checks.push('同時刪除與修改引用不產生失效引用');
+ if(raceUpdate[0].status!==200){
+   const changed=await (await fetch(url+'?classId=4')).json();
+   const current=changed.conclusions.find(c=>c.groupId===6);
+   check('解除同時新增的引用',(await req({...final,evidence:[ids[1]],version:current.version})).status,200);
+   check('解除引用後原提交者可刪除',(await req(deletion,'a','DELETE')).status,200);
+ }else checks.push('原提交者成功刪除未引用卡片');
+ check('重複刪除回報不存在',(await req(deletion,'a','DELETE')).status,404);
+ check('已刪除卡片不能由舊修訂復活',(await req({...card,version:2})).status,409);
+ const after=await (await fetch(url+'?classId=4')).json();
+ assert(!after.pairs.some(c=>c.id===ids[0]));checks.push('刪除後重新讀取已移除');
+ assert(after.pairs.some(c=>c.id===ids[1]));checks.push('其他同學卡片仍保留');
+ assert.deepEqual(after.conclusions.find(c=>c.groupId===6).evidence,[ids[1]]);checks.push('共同結論與有效引用仍保留');
+ const newConclusion={...final,classId:3,version:0,evidence:[ids[2]]};
+ const otherDeletion={...deletion,classId:3,id:ids[2],version:1};
+ const raceInsert=await Promise.all([req(otherDeletion,'b','DELETE'),req(newConclusion,'b')]);
+ assert((raceInsert[0].status===200&&[400,409].includes(raceInsert[1].status))||(raceInsert[0].status===409&&raceInsert[1].status===201));
+ const classThree=await (await fetch(url+'?classId=3')).json();
+ assert(classThree.conclusions.every(c=>c.evidence.every(id=>classThree.pairs.some(p=>p.id===id))));
+ checks.push('同時刪除與首次建立結論不產生失效引用');
  writeFileSync('verification.json',JSON.stringify({date:new Date().toISOString(),checks,status:'passed'},null,2));
  console.log(JSON.stringify({status:'passed',checks:checks.length,names:checks},null,2));
 }finally{
- writeFileSync('.openai/test-cleanup.sql',"DELETE FROM conclusions WHERE id='4-6' AND choice='測試共同选择';\nDELETE FROM pairs WHERE id IN ("+ids.map(x=>"'"+x+"'").join(',')+");\n");
+ writeFileSync('.openai/test-cleanup.sql',"DELETE FROM conclusions WHERE id IN ('4-6','3-6') AND choice='測試共同选择';\nDELETE FROM pairs WHERE id IN ("+ids.map(x=>"'"+x+"'").join(',')+");\n");
 }
 
