@@ -162,7 +162,11 @@ function Field({
   );
 }
 function Timer() {
-  const [left, setLeft] = useState(18 * 60),
+  const totalSeconds = stages.reduce(
+    (sum, stage) => sum + stage.minutes * 60,
+    0,
+  );
+  const [left, setLeft] = useState(totalSeconds),
     [running, setRunning] = useState(false);
   const deadline = useRef(0);
   useEffect(() => {
@@ -174,8 +178,15 @@ function Timer() {
     }, 250);
     return () => clearInterval(id);
   }, [running]);
-  const elapsed = 18 * 60 - left,
-    stage = elapsed < 540 ? 0 : elapsed < 720 ? 1 : elapsed < 960 ? 2 : 3;
+  const elapsed = totalSeconds - left;
+  const activeStage = stages.findIndex(
+    (_, index) =>
+      elapsed <
+      stages
+        .slice(0, index + 1)
+        .reduce((sum, item) => sum + item.minutes * 60, 0),
+  );
+  const stage = activeStage < 0 ? stages.length - 1 : activeStage;
   return (
     <div className="timer">
       <div>
@@ -203,10 +214,10 @@ function Timer() {
       <Button
         variant="ghost"
         size="icon"
-        aria-label="重設18分鐘"
+        aria-label={'重設' + totalSeconds / 60 + '分鐘'}
         onClick={() => {
           setRunning(false);
-          setLeft(1080);
+          setLeft(totalSeconds);
         }}
       >
         <RotateCcw />
@@ -242,7 +253,7 @@ function Practice({ draftKey }: { draftKey: string }) {
       <section className="panel">
         <div className="panel-heading">
           <div>
-            <p className="eyebrow">01 · 個人練習 · 9分鐘</p>
+            <p className="eyebrow">01 · 個人練習 · {stages[0].minutes}分鐘</p>
             <h2>先試一次，再找缺口</h2>
           </div>
           <BookOpen className="teal-icon" />
@@ -382,7 +393,7 @@ function PairForm({
     <section className="panel form-panel">
       <div className="panel-heading">
         <div>
-          <p className="eyebrow">02 · 同儕比較 · 3分鐘</p>
+          <p className="eyebrow">02 · 同儕比較 · {stages[1].minutes}分鐘</p>
           <h2>{editing ? '修訂比較卡' : '一起留下最有用的發現'}</h2>
         </div>
         <span className="location-badge">
@@ -792,7 +803,7 @@ function ConclusionForm({
     <section className="panel form-panel">
       <div className="panel-heading">
         <div>
-          <p className="eyebrow">03 · 小組整合 · 4分鐘</p>
+          <p className="eyebrow">03 · 小組整合 · {stages[2].minutes}分鐘</p>
           <h2>用比較卡支持你們的選擇</h2>
         </div>
         <span className="location-badge">

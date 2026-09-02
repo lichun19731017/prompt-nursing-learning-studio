@@ -35,9 +35,9 @@ export type Classroom = {
   updatedAt: string;
 };
 export const stages = [
-  { title: '個人練習', minutes: 9, caption: '執行 V1 → 寫 V2 → 追問查證' },
-  { title: '同儕比較', minutes: 3, caption: '每人說明，再共同提交比較卡' },
-  { title: '小組整合', minutes: 4, caption: '閱讀全組卡片，提出有依據的結論' },
+  { title: '個人練習', minutes: 4, caption: '執行 V1 → 寫 V2 → 追問查證' },
+  { title: '同儕比較', minutes: 5, caption: '每人說明，再共同提交比較卡' },
+  { title: '小組整合', minutes: 7, caption: '閱讀全組卡片，提出有依據的結論' },
   { title: '教師回饋', minutes: 2, caption: '分享不同做法與仍需查證的問題' },
 ];
 export const v1 = '請說明南丁格爾與現代護理。';
