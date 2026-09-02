@@ -1,6 +1,6 @@
 # Prompt 小組共學室｜交接
 日期：2026-09-02
-狀態：A–D 班級、兩人姓名與講義用語修改完成並通過本機檢查；準備更新私人網站。
+狀態：A–D 班級、兩人姓名與講義用語已完成；私人版本 3 發布成功。
 專案位置：本資料夾。網站識別見 .openai/hosting.json。
 私人網址：https://prompt-nursing-learning-studio.lichunlee.chatgpt.site
 
@@ -21,3 +21,14 @@ Canva：本次未改動原簡報；教師操作稿.md 已更新，仍保留活�
 Windows 封裝：Bash 不可用，使用官方 prepare-site-build.cjs 配合 PowerShell/tar。
 前次發布：私人版本 2 部署成功；正式 D1 已確認有 pairs 與 conclusions。
 
+
+本次正式版本：3；部署狀態 succeeded。版本識別：appgprj_6a98323bdd9c8191bc5febf8d34fd2fb~appgver_dfeeb65621d48191b30ef9fcdc30f342。部署識別：appgdep_6a983657b06c81919e4ad3e7a3374234。原始碼提交：401868c55a48b89449c7e4740223e85e898e6a5e。
+
+
+## GitHub 發布
+使用者於 2026-09-02 明確要求發布到 GitHub。已確認登入帳號 lichun19731017，尚無同名專案；選用獨立私人儲存庫 prompt-nursing-learning-studio，避免改動其他專案。
+範圍：本網站原始碼、遷移、教師操作稿、README；不包含本機資料庫、學生實際提交、環境變數或產出封裝。網站繼續於原 Sites 網址執行，本次不改變存取權限，也不啟用 GitHub Pages。
+驗證：沿用版本 3 已通過的程式與 API 檢查；本次僅補說明文件與發布交接。
+正式記憶庫：本輪以檔名查詢未找到 00_HOME.md，未讀取正式記憶；依據目前對話與本地專案。
+
+GitHub 儲存庫已建立並確認為 PRIVATE：https://github.com/lichun19731017/prompt-nursing-learning-studio 。發布分支使用 main，專案遠端名稱為 github。上傳前檢查三筆原始歷史，未發現指定的金鑰樣式或本機資料庫。
