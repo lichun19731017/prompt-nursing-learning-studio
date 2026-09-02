@@ -15,6 +15,13 @@
       "when": 1788359920910,
       "tag": "0001_little_proudstar",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1788361919878,
+      "tag": "0002_gigantic_george_stacy",
+      "breakpoints": true
     }
   ]
 }

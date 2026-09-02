@@ -7,10 +7,10 @@
 ## 課堂使用
 
 - A、B、C、D 四班，每班六組。
-- 個人練習 9 分鐘 → 兩人比較 3 分鐘 → 小組整合 4 分鐘 → 教師回饋 2 分鐘。
-- 兩人比較卡必填兩位姓名，記錄 Prompt 修改、回答差異及依講義查證的結果。
+- 個人練習 9 分鐘 → 同儕比較 3 分鐘 → 小組整合 4 分鐘 → 教師回饋 2 分鐘。
+- 同儕比較卡依 2–3 人填寫全體姓名，記錄 Prompt 修改、回答差異及依講義查證的結果。
 - 小組共同結論引用本組比較卡，由組員討論並確認。
-- 教師可閱讀各組成果並匯出 CSV，包含兩位姓名。
+- 教師可閱讀各組成果並匯出 CSV，包含全體成員姓名。
 - 講義由任課教師提供，未在此儲存庫附上。
 
 原提交裝置可修訂自己的成果；版本檢查防止同時修改互相覆蓋。班級選單是導覽，教師總覽是唯讀檢視，兩者都不是身分認證。
@@ -35,6 +35,7 @@ pnpm install --frozen-lockfile
 ```sh
 pnpm exec wrangler d1 execute DB --local --persist-to .wrangler/state --config .openai/local-wrangler.json --file drizzle/0000_material_cable.sql
 pnpm exec wrangler d1 execute DB --local --persist-to .wrangler/state --config .openai/local-wrangler.json --file drizzle/0001_little_proudstar.sql
+pnpm exec wrangler d1 execute DB --local --persist-to .wrangler/state --config .openai/local-wrangler.json --file drizzle/0002_gigantic_george_stacy.sql
 pnpm dev
 ```
 
@@ -49,14 +50,14 @@ node -e "require('fs').mkdirSync('outputs',{recursive:true})"
 node scripts/verify-class-labels.mjs
 ```
 
-啟動本機網站後，可另開終端機執行 API 測試。測試固定連線至 localhost:3000，請使用測試用本機資料庫，保留 D 班第 6 組為空白：
+啟動本機網站後，可另開終端機執行 API 測試。測試固定連線至 localhost:3000，請使用測試用本機資料庫，保留 D 班第 5、6 組為空白：
 
 ```sh
 node scripts/verify-workflow.mjs
 pnpm exec wrangler d1 execute DB --local --persist-to .wrangler/state --config .openai/local-wrangler.json --file .openai/test-cleanup.sql
 ```
 
-API 測試包含兩位姓名必填、固定兩人、班級查詢與引用限制、重複提交、修訂權限、版本衝突及姓名讀回。測試完成後以產生的清理檔移除本次合成測試資料。
+API 測試包含全體成員姓名必填、支援 2–3 人、第三位姓名與自動配號、班級查詢與引用限制、重複提交、修訂權限、版本衝突及姓名讀回。測試完成後以產生的清理檔移除本次合成測試資料。
 
 ## 檔案
 
@@ -73,3 +74,7 @@ API 測試包含兩位姓名必填、固定兩人、班級查詢與引用限制�
 
 ## 刪除比較卡
 比較卡下方提供「刪除」按鈕，學生入口與教師總覽都會顯示。只能在原提交的瀏覽器刪除自己的卡片，確認後無法復原。若共同結論正在引用此卡，需由結論提交者先改用其他有效比較卡；網站不會連帶刪除共同結論或其他人的卡片。沒有權限時按鈕停用並顯示原因。
+
+
+## 每隊人數與編號
+每隊可選 2 人或 3 人；選 3 人時第三位姓名為必填。學生不需填寫隊伍編號，送出時由系統自動分配，修訂時保留編號。若改回 2 人，儲存後不保留第三位姓名。四班各六組的組別設定不變。

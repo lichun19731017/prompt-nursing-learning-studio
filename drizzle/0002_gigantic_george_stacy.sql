@@ -1,0 +1,1 @@
+ALTER TABLE `pairs` ADD `name_three` text DEFAULT '' NOT NULL;

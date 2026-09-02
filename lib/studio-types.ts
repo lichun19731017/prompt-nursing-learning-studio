@@ -6,6 +6,7 @@ export type PairCard = {
   members: number;
   nameOne: string;
   nameTwo: string;
+  nameThree: string;
   change: string;
   difference: string;
   verification: string;
@@ -35,7 +36,7 @@ export type Classroom = {
 };
 export const stages = [
   { title: '個人練習', minutes: 9, caption: '執行 V1 → 寫 V2 → 追問查證' },
-  { title: '兩人比較', minutes: 3, caption: '每人說明，再共同提交比較卡' },
+  { title: '同儕比較', minutes: 3, caption: '每人說明，再共同提交比較卡' },
   { title: '小組整合', minutes: 4, caption: '閱讀全組卡片，提出有依據的結論' },
   { title: '教師回饋', minutes: 2, caption: '分享不同做法與仍需查證的問題' },
 ];
@@ -52,4 +53,18 @@ export function parseClassId(value: string | null) {
     value?.toUpperCase() as (typeof CLASS_NAMES)[number],
   );
   return i >= 0 ? i + 1 : Number(value);
+}
+
+export function memberNames(
+  card: Pick<PairCard, 'members' | 'nameOne' | 'nameTwo' | 'nameThree'>,
+) {
+  return (
+    [
+      card.nameOne,
+      card.nameTwo,
+      ...(card.members === 3 ? [card.nameThree] : []),
+    ]
+      .filter(Boolean)
+      .join('、') || '尚未填寫姓名'
+  );
 }

@@ -14,6 +14,7 @@ export const pairs = sqliteTable(
     members: integer('members').notNull(),
     nameOne: text('name_one').notNull().default(''),
     nameTwo: text('name_two').notNull().default(''),
+    nameThree: text('name_three').notNull().default(''),
     change: text('change').notNull(),
     difference: text('difference').notNull(),
     verification: text('verification').notNull(),

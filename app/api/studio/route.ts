@@ -57,6 +57,7 @@ function pair(r: Row, owner: string): PairCard {
     members: r.members,
     nameOne: r.name_one || '',
     nameTwo: r.name_two || '',
+    nameThree: r.name_three || '',
     change: r.change,
     difference: r.difference,
     verification: r.verification,
@@ -87,10 +88,7 @@ function failure(e: unknown) {
     e instanceof Error &&
     /UNIQUE constraint failed: pairs.class_id/.test(e.message)
   )
-    return reply(
-      { error: '這個兩人編號已有人使用。請確認是同一對同學，或改用其他編號。' },
-      409,
-    );
+    return reply({ error: '隊伍編號正在更新，請稍後重新送出。' }, 409);
   if (e instanceof Error && /UNIQUE constraint failed/.test(e.message))
     return reply({ error: '已有同學送出這份資料，請重新整理後確認。' }, 409);
   console.error(
@@ -174,15 +172,24 @@ export async function POST(request: Request) {
       now = new Date().toISOString();
     if (b.action === 'pair') {
       const id = identifier(b.id),
-        pairNo = bounded(b.pairNo, 1, 100, '兩人編號'),
-        members = bounded(b.members, 2, 2, '人數');
+        members = bounded(b.members, 2, 3, '人數');
       const nameOne = content(b.nameOne, '第一位同學姓名', 80),
-        nameTwo = content(b.nameTwo, '第二位同學姓名', 80);
+        nameTwo = content(b.nameTwo, '第二位同學姓名', 80),
+        nameThree =
+          members === 3 ? content(b.nameThree, '第三位同學姓名', 80) : '';
       const change = content(b.change, '關鍵修改'),
         difference = content(b.difference, '回答差異'),
         verification = content(b.verification, '查證結果');
+      const sameContent = (r: Row) =>
+        r.members === members &&
+        r.name_one === nameOne &&
+        r.name_two === nameTwo &&
+        (r.name_three || '') === nameThree &&
+        r.change === change &&
+        r.difference === difference &&
+        r.verification === verification;
       const previous = await db
-        .prepare('SELECT * FROM pairs WHERE id = ?')
+        .prepare('SELECT * FROM pairs WHERE id=?')
         .bind(id)
         .first<Row>();
       if (previous) {
@@ -192,30 +199,27 @@ export async function POST(request: Request) {
           previous.owner !== owner
         )
           throw new HttpError(403, '只能由原提交者在同一裝置修改這張卡。');
-        if (
-          previous.change === change &&
-          previous.difference === difference &&
-          previous.verification === verification &&
-          previous.pair_no === pairNo &&
-          previous.members === members &&
-          previous.name_one === nameOne &&
-          previous.name_two === nameTwo
-        )
+        if (sameContent(previous))
           return reply(
-            { ok: true, id, version: previous.version },
+            {
+              ok: true,
+              id,
+              pairNo: previous.pair_no,
+              version: previous.version,
+            },
             200,
             cookie,
           );
         const v = bounded(b.version, 1, 10000, '版本');
         const result = await db
           .prepare(
-            'UPDATE pairs SET pair_no=?, members=?, name_one=?, name_two=?, change=?, difference=?, verification=?, updated_at=?, version=version+1 WHERE id=? AND version=? AND owner=?',
+            'UPDATE pairs SET members=?,name_one=?,name_two=?,name_three=?,change=?,difference=?,verification=?,updated_at=?,version=version+1 WHERE id=? AND version=? AND owner=?',
           )
           .bind(
-            pairNo,
             members,
             nameOne,
             nameTwo,
+            nameThree,
             change,
             difference,
             verification,
@@ -227,31 +231,61 @@ export async function POST(request: Request) {
           .run();
         if (!result.meta.changes)
           throw new HttpError(409, '這張卡已有更新，請重新整理後再修改。');
-        return reply({ ok: true, id, version: v + 1 }, 200, cookie);
+        return reply(
+          { ok: true, id, pairNo: previous.pair_no, version: v + 1 },
+          200,
+          cookie,
+        );
       }
       if (b.version && b.version !== 0)
         throw new HttpError(409, '這張卡不存在，請重新整理。');
-      await db
+      // Allocate the group-local number atomically; never trust a client-supplied number.
+      const inserted = await db
         .prepare(
-          'INSERT INTO pairs (id,class_id,group_id,pair_no,members,name_one,name_two,change,difference,verification,owner,version,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,1,?,?)',
+          'INSERT INTO pairs (id,class_id,group_id,pair_no,members,name_one,name_two,name_three,change,difference,verification,owner,version,created_at,updated_at) SELECT ?,?,?,COALESCE(MAX(pair_no),0)+1,?,?,?,?,?,?,?,?,1,?,? FROM pairs WHERE class_id=? AND group_id=? ON CONFLICT(id) DO NOTHING RETURNING pair_no',
         )
         .bind(
           id,
           classId,
           groupId,
-          pairNo,
           members,
           nameOne,
           nameTwo,
+          nameThree,
           change,
           difference,
           verification,
           owner,
           now,
           now,
+          classId,
+          groupId,
         )
-        .run();
-      return reply({ ok: true, id, version: 1 }, 201, cookie);
+        .first<{ pair_no: number }>();
+      if (!inserted) {
+        const retry = await db
+          .prepare('SELECT * FROM pairs WHERE id=?')
+          .bind(id)
+          .first<Row>();
+        if (
+          retry &&
+          retry.owner === owner &&
+          retry.class_id === classId &&
+          retry.group_id === groupId &&
+          sameContent(retry)
+        )
+          return reply(
+            { ok: true, id, pairNo: retry.pair_no, version: retry.version },
+            200,
+            cookie,
+          );
+        throw new HttpError(409, '這張卡已有其他內容，請重新整理後確認。');
+      }
+      return reply(
+        { ok: true, id, pairNo: inserted.pair_no, version: 1 },
+        201,
+        cookie,
+      );
     }
     if (b.action === 'conclusion') {
       if (b.confirmed !== true)

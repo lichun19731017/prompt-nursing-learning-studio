@@ -1167,3 +1167,37 @@ fieldset.form-field {
   font-size: 14px;
   line-height: 1.6;
 }
+
+.team-size-field {
+  border: 0;
+  padding: 0;
+  margin: 24px 0;
+}
+.team-size-field legend {
+  font-size: 14px;
+  font-weight: 700;
+  margin-bottom: 10px;
+}
+.team-size-options {
+  display: flex;
+  gap: 12px;
+}
+.team-size-options label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px 20px;
+  cursor: pointer;
+  min-height: 44px;
+}
+.team-size-options label:has(input:checked) {
+  border-color: var(--primary);
+  background: var(--accent);
+}
+.team-size-options input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--primary);
+}

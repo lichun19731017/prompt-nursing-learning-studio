@@ -41,6 +41,7 @@ import {
   stages,
   classLabel,
   parseClassId,
+  memberNames,
   v1,
   referencePrompt,
   type Classroom,
@@ -50,10 +51,10 @@ import {
 
 type Notice = { text: string; error?: boolean };
 const emptyPair = {
-  pairNo: 1,
   members: 2,
   nameOne: '',
   nameTwo: '',
+  nameThree: '',
   change: '',
   difference: '',
   verification: '',
@@ -306,7 +307,8 @@ function Practice({ draftKey }: { draftKey: string }) {
           placeholder="查了哪一句、對照哪一點？確認結果與仍不確定之處。"
         />
         <p className="draft-note">
-          此區是本裝置的暫存筆記，不會上傳給同組。接下來請兩兩分享，再共同填寫比較卡。
+          此區是本裝置的暫存筆記，不會上傳給同組。接下來請2–3
+          人分享，再共同填寫比較卡。
         </p>
       </section>
     </div>
@@ -334,7 +336,7 @@ function PairForm({
   const id = useRef(editing?.id || '');
   useEffect(() => {
     const saved = restore(key, { ...emptyPair, ...editing });
-    setDraft(saved);
+    setDraft({ ...saved, members: saved.members === 3 ? 3 : 2 });
     id.current = editing?.id || crypto.randomUUID();
   }, [key, editing]);
   const set = (k: string, v: unknown) =>
@@ -349,13 +351,14 @@ function PairForm({
     setBusy(true);
     try {
       await post({
+        ...draft,
         action: 'pair',
         classId,
         groupId,
         id: id.current,
         version: editing?.version || 0,
-        ...draft,
-        members: 2,
+        members: draft.members === 3 ? 3 : 2,
+        nameThree: draft.members === 3 ? draft.nameThree : '',
       });
       try {
         sessionStorage.removeItem(key);
@@ -379,7 +382,7 @@ function PairForm({
     <section className="panel form-panel">
       <div className="panel-heading">
         <div>
-          <p className="eyebrow">02 · 兩人比較 · 3分鐘</p>
+          <p className="eyebrow">02 · 同儕比較 · 3分鐘</p>
           <h2>{editing ? '修訂比較卡' : '一起留下最有用的發現'}</h2>
         </div>
         <span className="location-badge">
@@ -387,32 +390,31 @@ function PairForm({
         </span>
       </div>
       <p className="muted">
-        兩人各自說明自己的版本，再由一人代表提交。每對一張，請填寫兩位同學的姓名。
+        每人各自說明自己的版本，再由一人代表提交。每隊 2–3
+        人，共同完成一張比較卡，填寫全體成員姓名。
       </p>
       <form onSubmit={submit}>
-        <div className="form-row">
-          <label className="form-field">
-            <strong>我們是第幾對？</strong>
-            <Input
-              type="number"
-              inputMode="numeric"
-              min={1}
-              max={100}
-              required
-              value={draft.pairNo}
-              onChange={(e) => set('pairNo', Number(e.target.value))}
-            />
-            <span className="field-hint">
-              請先與同組約定編號，姓名填寫於下方。
-            </span>
-          </label>
-          <div className="form-field">
-            <strong>兩人一組</strong>
-            <span className="field-hint">
-              由其中一位代表提交，兩位姓名皆為必填。
-            </span>
+        <fieldset className="team-size-field">
+          <legend>這一隊有幾位同學？</legend>
+          <div className="team-size-options">
+            {[2, 3].map((n) => (
+              <label key={n}>
+                <input
+                  type="radio"
+                  name="team-members"
+                  value={n}
+                  checked={draft.members === n}
+                  onChange={() => set('members', n)}
+                />
+                {n} 人
+              </label>
+            ))}
           </div>
-        </div>
+          <p className="field-hint">
+            每隊 2–3
+            人，由一位代表提交。請填寫全體成員姓名；隊伍編號由系統自動安排。
+          </p>
+        </fieldset>
         <div className="form-row">
           <label className="form-field">
             <strong>第一位同學姓名（必填）</strong>
@@ -437,6 +439,19 @@ function PairForm({
             />
           </label>
         </div>
+        {draft.members === 3 && (
+          <label className="form-field">
+            <strong>第三位同學姓名（必填）</strong>
+            <Input
+              required
+              maxLength={80}
+              autoComplete="off"
+              value={draft.nameThree}
+              onChange={(e) => set('nameThree', e.target.value)}
+              placeholder="請輸入姓名"
+            />
+          </label>
+        )}
         <p className="field-hint">
           姓名會隨比較卡顯示，供網站使用者與教師閱讀，並包含在教師匯出資料中。請勿填寫學號或病人資料。
         </p>
@@ -472,7 +487,7 @@ function PairForm({
           </Button>
           <Button type="submit" disabled={busy}>
             <Send />
-            {busy ? '正在送出…' : editing ? '儲存修訂' : '送出兩人比較卡'}
+            {busy ? '正在送出…' : editing ? '儲存修訂' : '送出同儕比較卡'}
           </Button>
         </div>
         <p className="draft-note">
@@ -535,7 +550,7 @@ function DeletePairButton({
         type="button"
         variant="destructive"
         disabled={!card.canEdit || referenced}
-        aria-label={'刪除第' + card.pairNo + '對比較卡'}
+        aria-label={'刪除第' + card.pairNo + '隊比較卡'}
         aria-describedby={hint ? 'delete-hint-' + card.id : undefined}
         onClick={() => {
           setError('');
@@ -558,12 +573,12 @@ function DeletePairButton({
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>刪除這張兩人比較卡？</AlertDialogTitle>
+            <AlertDialogTitle>刪除這張同儕比較卡？</AlertDialogTitle>
             <AlertDialogDescription>
               {classLabel(card.classId)} 班・第{card.groupId}組・第{card.pairNo}
-              對
+              隊
               <br />
-              {card.nameOne}、{card.nameTwo}
+              {memberNames(card)}
               <br />
               確認後會從全組成果與教師總覽移除，無法復原。其他比較卡會保留。
             </AlertDialogDescription>
@@ -607,7 +622,7 @@ function PairList({
       <div className="empty-state">
         <MessageSquare />
         <h3>等待第一張比較卡</h3>
-        <p>先兩兩分享，再把你們的修改、差異與查證結果送到這裡。</p>
+        <p>先2–3 人分享，再把你們的修改、差異與查證結果送到這裡。</p>
       </div>
     );
   return (
@@ -615,16 +630,12 @@ function PairList({
       {cards.map((c) => (
         <article className="comparison-card" key={c.id} id={'card-' + c.id}>
           <header>
-            <span className="pair-badge">第{c.pairNo}對</span>
+            <span className="pair-badge">第{c.pairNo}隊</span>
             <span>
               {c.members}人同行 · {time(c.updatedAt)}
             </span>
           </header>
-          <p className="pair-names">
-            {c.nameOne && c.nameTwo
-              ? c.nameOne + '、' + c.nameTwo
-              : '尚未填寫姓名'}
-          </p>
+          <p className="pair-names">{memberNames(c)}</p>
           <div>
             <small>我們改了什麼</small>
             <p>{c.change}</p>
@@ -688,7 +699,7 @@ function ConclusionView({
           const c = cards.find((p) => p.id === id);
           return c ? (
             <a key={id} href={'#card-' + id}>
-              第{c.pairNo}對比較卡
+              第{c.pairNo}隊比較卡
             </a>
           ) : (
             <span key={id}>卡片未載入</span>
@@ -769,7 +780,7 @@ function ConclusionForm({
       try {
         sessionStorage.removeItem(key);
       } catch {}
-      notify({ text: '小組共同結論已儲存。兩人原始比較卡也完整保留。' });
+      notify({ text: '小組共同結論已儲存。同儕原始比較卡也完整保留。' });
       onDone();
     } catch (e) {
       notify({ text: (e as Error).message, error: true });
@@ -817,7 +828,7 @@ function ConclusionForm({
                   }
                 />
                 <span>
-                  <strong>第{c.pairNo}對</strong> {c.change}
+                  <strong>第{c.pairNo}隊</strong> {c.change}
                 </span>
               </label>
             ))}
@@ -827,7 +838,7 @@ function ConclusionForm({
           label="選擇的理由與回答中的證據"
           value={draft.reason}
           onChange={(v) => set('reason', v)}
-          placeholder="第……對的回答顯示……，因此我們認為……。"
+          placeholder="第……隊的回答顯示……，因此我們認為……。"
         />
         <Field
           label="③ 綜合討論後，我們會怎麼改寫？"
@@ -974,7 +985,7 @@ export default function Home() {
         : current,
     );
     setNotice({
-      text: '已刪除第' + card.pairNo + '對比較卡，其他資料已保留。',
+      text: '已刪除第' + card.pairNo + '隊比較卡，其他資料已保留。',
     });
     void refresh(true);
   };
@@ -1030,7 +1041,7 @@ export default function Home() {
     register({
       name: 'read_classroom_learning',
       title: '讀取班級共學成果',
-      description: '讀取目前班級的兩人比較卡與小組結論；只讀，不會提交或修改。',
+      description: '讀取目前班級的同儕比較卡與小組結論；只讀，不會提交或修改。',
       inputSchema: {
         type: 'object',
         properties: {},
@@ -1125,7 +1136,7 @@ export default function Home() {
           <p className="privacy-note">
             使用班級與組別識別。
             <br />
-            比較卡請填寫兩位姓名。請勿填寫學號或病人資料。
+            比較卡請填寫全體 2–3 位成員姓名。請勿填寫學號或病人資料。
           </p>
           {teacher && <Timer />}
         </aside>
@@ -1284,7 +1295,7 @@ export default function Home() {
                         <p>{s.caption}</p>
                         {i === 1 && (
                           <p>
-                            每對兩人，只提交一張卡；必須填寫兩位同學的姓名。
+                            每隊 2–3 人，只提交一張卡；必須填寫全體成員姓名。
                           </p>
                         )}
                         {i === 2 && (
@@ -1397,9 +1408,9 @@ export default function Home() {
                 <>
                   <div className="content-heading">
                     <div>
-                      <h2>第{groupId}組的兩人比較卡</h2>
+                      <h2>第{groupId}組的同儕比較卡</h2>
                       <p className="muted">
-                        閱讀每對同學的修改、回答差異與查證發現。
+                        閱讀每隊同學的修改、回答差異與查證發現。
                       </p>
                     </div>
                     {!teacher && (
@@ -1490,7 +1501,7 @@ export default function Home() {
       </div>
       <footer>
         先理解，再比較，最後共同決定。
-        <span>Prompt Learning Studio · 兩人具名參與，不蒐集學號</span>
+        <span>Prompt Learning Studio · 2–3 人具名參與，不蒐集學號</span>
       </footer>
     </div>
   );
